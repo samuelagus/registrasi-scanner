@@ -1,0 +1,332 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1">
+  <title>Scan QR - Check-in Acara</title>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: Arial, sans-serif;
+      background: #f3f4f6;
+      color: #1f2937;
+    }
+
+    main {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 20px;
+      background: white;
+      border-radius: 14px;
+      box-shadow: 0 2px 12px #00000012;
+    }
+
+    h1 { font-size: 22px; margin-top: 0; }
+
+    label {
+      display: block;
+      margin-top: 14px;
+      font-weight: 600;
+    }
+
+    input, button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 6px;
+      font-size: 16px;
+      border-radius: 8px;
+    }
+
+    input { border: 1px solid #cbd5e1; }
+
+    button {
+      border: 0;
+      cursor: pointer;
+      background: #1d4ed8;
+      color: white;
+      font-weight: 600;
+    }
+
+    button:disabled { opacity: .5; }
+
+    #reader {
+      width: 100%;
+      margin-top: 16px;
+    }
+
+    #result {
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: 8px;
+      background: #f3f4f6;
+      white-space: pre-line;
+      overflow-wrap: anywhere;
+    }
+
+    .success { background: #dcfce7 !important; }
+    .warning { background: #fef3c7 !important; }
+    .error { background: #fee2e2 !important; }
+
+    .small {
+      font-size: 13px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+
+<body>
+<main>
+  <h1>Check-in Peserta</h1>
+  <p class="small">
+    Isi identitas panitia satu kali. Arahkan kamera ke QR tiket
+    untuk memproses check-in.
+  </p>
+
+  <label for="staffName">Nama panitia</label>
+  <input id="staffName" maxlength="100"
+         autocomplete="name" required>
+
+  <label for="pin">PIN panitia</label>
+  <input id="pin" type="password"
+         inputmode="numeric" autocomplete="off" required>
+
+  <button id="startButton" type="button">
+    Aktifkan Kamera
+  </button>
+
+  <div id="reader"></div>
+
+  <div id="result" role="status" aria-live="polite">
+    Kamera belum diaktifkan.
+  </div>
+
+  <button id="restartButton" type="button" hidden>
+    Scan Peserta Berikutnya
+  </button>
+
+  <p class="small">
+    Jika kamera tidak tersedia, gunakan halaman Check-in lama
+    untuk memasukkan token secara manual.
+  </p>
+</main>
+
+<iframe name="checkinResponseFrame"
+        title="Respons check-in"
+        hidden></iframe>
+
+<form id="checkinForm"
+      method="post"
+      target="checkinResponseFrame"
+      action="https://script.google.com/macros/s/AKfycbzC7oIumFQ_6bdgaX6AZDengCrODyKBT8NFtmAcMf2ihbAGx4POSYeClSevHsH12Z1e1w/exec"
+      hidden>
+  <input name="qrToken">
+  <input name="pin">
+  <input name="staffName">
+  <input name="requestId">
+</form>
+
+<script>
+  const scanner = new Html5Qrcode('reader');
+
+  const startButton = document.getElementById('startButton');
+  const restartButton = document.getElementById('restartButton');
+  const resultBox = document.getElementById('result');
+  const form = document.getElementById('checkinForm');
+
+  let scanning = false;
+  let busy = false;
+  let activeRequestId = '';
+
+  function showResult(message, type) {
+    resultBox.textContent = message;
+    resultBox.className = type || '';
+  }
+
+  function makeRequestId() {
+    return Date.now().toString(36) + '-' +
+      Math.random().toString(36).slice(2) + '-' +
+      Math.random().toString(36).slice(2);
+  }
+
+  async function stopScanner() {
+    if (!scanning) return;
+
+    scanning = false;
+
+    try {
+      await scanner.stop();
+    } catch (error) {
+      console.warn('Scanner stop:', error);
+    }
+
+    startButton.disabled = false;
+  }
+
+  async function submitScannedToken(token) {
+    if (busy) return;
+
+    const staffName = document.getElementById('staffName')
+      .value.trim();
+    const pin = document.getElementById('pin').value;
+
+    if (!staffName || !pin) {
+      showResult(
+        'Isi nama panitia dan PIN sebelum mulai scan.',
+        'error'
+      );
+      await stopScanner();
+      return;
+    }
+
+    busy = true;
+    await stopScanner();
+
+    activeRequestId = makeRequestId();
+
+    form.elements.qrToken.value = token;
+    form.elements.pin.value = pin;
+    form.elements.staffName.value = staffName;
+    form.elements.requestId.value = activeRequestId;
+
+    restartButton.hidden = true;
+
+    showResult('QR terbaca. Memvalidasi check-in...', 'warning');
+
+    // Form POST menghindari kebutuhan membaca respons dengan fetch/CORS.
+    // Respons server dikirim kembali melalui postMessage.
+    form.requestSubmit
+      ? form.requestSubmit()
+      : form.submit();
+  }
+
+  async function startScanner() {
+    if (busy || scanning) return;
+
+    const staffName = document.getElementById('staffName')
+      .value.trim();
+    const pin = document.getElementById('pin').value;
+
+    if (!staffName || !pin) {
+      showResult('Isi nama panitia dan PIN terlebih dahulu.', 'error');
+      return;
+    }
+
+    if (!window.isSecureContext) {
+      showResult('Halaman harus dibuka melalui HTTPS.', 'error');
+      return;
+    }
+
+    if (typeof Html5Qrcode === 'undefined') {
+      showResult(
+        'Pustaka QR gagal dimuat. Periksa koneksi internet dan muat ulang halaman.',
+        'error'
+      );
+      return;
+    }
+
+    try {
+      startButton.disabled = true;
+      showResult('Membuka kamera...', '');
+
+      await scanner.start(
+        { facingMode: 'environment' },
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1
+        },
+        async function(decodedText) {
+          // Hanya menerima token QR yang sesuai format sistem.
+          if (!/^[a-f0-9]{32}$/i.test(decodedText.trim())) {
+            showResult('QR terbaca, tetapi format token tidak valid.', 'error');
+            return;
+          }
+
+          await submitScannedToken(decodedText.trim());
+        },
+        function() {
+          // Abaikan frame yang belum menghasilkan QR.
+        }
+      );
+
+      scanning = true;
+      showResult('Arahkan kamera ke QR tiket peserta.', '');
+
+    } catch (error) {
+      scanning = false;
+      startButton.disabled = false;
+
+      showResult(
+        'Kamera gagal dibuka: ' +
+        (error.message || error.name || 'Kesalahan tidak diketahui'),
+        'error'
+      );
+    }
+  }
+
+  window.addEventListener('message', function(event) {
+    if (
+      event.origin !== 'https://script.google.com' &&
+      event.origin !== 'https://script.googleusercontent.com'
+    ) {
+      return;
+    }
+
+    const data = event.data;
+
+    if (!data || data.requestId !== activeRequestId) return;
+
+    busy = false;
+    activeRequestId = '';
+
+    let type = 'error';
+    let message = data.message || 'Check-in gagal.';
+
+    if (data.status === 'success') {
+      type = 'success';
+      message =
+        'CHECK-IN BERHASIL\n' +
+        (data.participantName || '') + '\n' +
+        (data.registrationNo || '') + '\n' +
+        (data.checkinAt || '');
+    } else if (data.status === 'already_checked_in') {
+      type = 'warning';
+      message =
+        'PESERTA SUDAH CHECK-IN\n' +
+        (data.participantName || '') + '\n' +
+        (data.registrationNo || '') + '\n' +
+        (data.checkinAt || '');
+    } else if (data.status === 'invalid') {
+      type = 'error';
+      message = data.message || 'QR tidak valid.';
+    }
+
+    showResult(message, type);
+    restartButton.hidden = false;
+  });
+
+  startButton.addEventListener('click', startScanner);
+
+  restartButton.addEventListener('click', function() {
+    restartButton.hidden = true;
+    showResult('Siap untuk peserta berikutnya.', '');
+    startScanner();
+  });
+
+  window.addEventListener('pagehide', function() {
+    if (scanning) {
+      scanner.stop().catch(function() {});
+    }
+  });
+</script>
+</body>
+</html>
