@@ -145,6 +145,7 @@
   let scanning = false;
   let busy = false;
   let activeRequestId = '';
+  let responseTimeout = null;
 
   function showResult(message, type) {
     resultBox.textContent = message;
@@ -200,6 +201,27 @@
     restartButton.hidden = true;
 
     showResult('QR terbaca. Memvalidasi check-in...', 'warning');
+
+    if (responseTimeout) {
+      clearTimeout(responseTimeout);
+    }
+    
+    responseTimeout = setTimeout(function() {
+      if (!busy) return;
+    
+      busy = false;
+      activeRequestId = '';
+    
+      showResult(
+        'Belum menerima respons dari server. ' +
+        'Periksa koneksi internet dan log eksekusi Apps Script ' +
+        'sebelum mencoba scan ulang.',
+        'error'
+      );
+    
+      restartButton.hidden = false;
+    }, 20000);
+      
 
     // Form POST menghindari kebutuhan membaca respons dengan fetch/CORS.
     // Respons server dikirim kembali melalui postMessage.
@@ -288,6 +310,11 @@
     const data = event.data;
 
     if (!data || data.requestId !== activeRequestId) return;
+
+    if (responseTimeout) {
+      clearTimeout(responseTimeout);
+      responseTimeout = null;
+    }
 
     busy = false;
     activeRequestId = '';
