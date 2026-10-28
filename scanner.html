@@ -274,13 +274,17 @@
   }
 
   window.addEventListener('message', function(event) {
-    if (
-      event.origin !== 'https://script.google.com' &&
-      event.origin !== 'https://script.googleusercontent.com'
-    ) {
+    const origin = event.origin;
+  
+    const trustedOrigin =
+      origin === 'https://script.google.com' ||
+      origin.endsWith('.script.googleusercontent.com') ||
+      origin === 'https://script.googleusercontent.com';
+  
+    if (!trustedOrigin) {
       return;
     }
-
+  
     const data = event.data;
 
     if (!data || data.requestId !== activeRequestId) return;
