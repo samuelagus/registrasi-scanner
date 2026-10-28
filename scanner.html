@@ -298,6 +298,7 @@
     }
   }
 
+  
   window.addEventListener('message', function(event) {
     const origin = event.origin;
   
@@ -311,42 +312,45 @@
     }
   
     const data = event.data;
-
-    if (!data || data.requestId !== activeRequestId) return;
-
+  
+    if (!data || data.requestId !== activeRequestId) {
+      return;
+    }
+  
     if (responseTimeout) {
       clearTimeout(responseTimeout);
       responseTimeout = null;
     }
-
+  
     busy = false;
     activeRequestId = '';
-
-    let type = 'error';
-    let message = data.message || 'Check-in gagal.';
-
+  
     if (data.status === 'success') {
-      type = 'success';
-      message =
+      showResult(
         'CHECK-IN BERHASIL\n' +
-        (data.participantName || '') + '\n' +
-        (data.registrationNo || '') + '\n' +
-        (data.checkinAt || '');
+        data.participantName + '\n' +
+        data.registrationNo + '\n' +
+        data.checkinAt,
+        'success'
+      );
     } else if (data.status === 'already_checked_in') {
-      type = 'warning';
-      message =
-        'PESERTA SUDAH CHECK-IN\n' +
-        (data.participantName || '') + '\n' +
-        (data.registrationNo || '') + '\n' +
-        (data.checkinAt || '');
-    } else if (data.status === 'invalid') {
-      type = 'error';
-      message = data.message || 'QR tidak valid.';
+      showResult(
+        'SUDAH CHECK-IN\n' +
+        data.participantName + '\n' +
+        data.registrationNo + '\n' +
+        data.checkinAt,
+        'error'
+      );
+    } else {
+      showResult(
+        data.message || 'Check-in gagal.',
+        'error'
+      );
     }
-
-    showResult(message, type);
+  
     restartButton.hidden = false;
   });
+
 
   startButton.addEventListener('click', startScanner);
 
