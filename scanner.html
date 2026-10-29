@@ -299,21 +299,41 @@
   }
 
   
+  
   window.addEventListener('message', function(event) {
-    const origin = event.origin;
+    const data = event.data;
   
-    const trustedOrigin =
-      origin === 'https://script.google.com' ||
-      origin.endsWith('.script.googleusercontent.com') ||
-      origin === 'https://script.googleusercontent.com';
+    // DIAGNOSTIK: catat semua pesan yang diterima halaman utama.
+    console.log('[CHECKIN DEBUG] Pesan diterima:', {
+      origin: event.origin,
+      data: data,
+      activeRequestId: activeRequestId,
+      source: event.source
+    });
   
-    if (!trustedOrigin) {
+    if (!data || typeof data !== 'object') {
+      console.warn('[CHECKIN DEBUG] Pesan bukan object.');
       return;
     }
   
-    const data = event.data;
+    if (data.requestId !== activeRequestId) {
+      console.warn('[CHECKIN DEBUG] Request ID tidak cocok:', {
+        received: data.requestId,
+        expected: activeRequestId
+      });
+      return;
+    }
   
-    if (!data || data.requestId !== activeRequestId) {
+    const trustedOrigin =
+      event.origin === 'https://script.google.com' ||
+      event.origin === 'https://script.googleusercontent.com' ||
+      event.origin.endsWith('.script.googleusercontent.com');
+  
+    if (!trustedOrigin) {
+      console.warn(
+        '[CHECKIN DEBUG] Origin tidak dipercaya:',
+        event.origin
+      );
       return;
     }
   
@@ -342,10 +362,7 @@
         'error'
       );
     } else {
-      showResult(
-        data.message || 'Check-in gagal.',
-        'error'
-      );
+      showResult(data.message || 'Check-in gagal.', 'error');
     }
   
     restartButton.hidden = false;
