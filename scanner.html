@@ -532,8 +532,9 @@
         'CHECK-IN BERHASIL\n' +
         data.participantName + '\n' +
         data.registrationNo + '\n' +
-        data.participantId + '\n' +
-        data.checkinAt,
+        'Participant ID: ' + (data.participantId || '-') + '\n' +
+        data.checkinAt + '\n' +
+        'Panitia: ' + (data.checkedInBy || '-'),
         'success'
       );
         
@@ -542,7 +543,7 @@
         'SUDAH CHECK-IN\n' +
         data.participantName + '\n' +
         data.registrationNo + '\n' +
-        data.participantId + '\n' +
+        'Participant ID: ' + (data.participantId || '-') + '\n' +
         data.checkinAt + '\n' +
         'Panitia: ' + (data.checkedInBy || 'Tidak diketahui'),
         'warning'
