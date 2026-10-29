@@ -524,8 +524,7 @@
       responseFrame.style.display = 'none';
     }
   
-    // Hanya respons server dengan hak Administrator
-    // yang boleh membuka kontrol diagnostik.
+    // Hanya respons server dengan hak Administrator yang boleh membuka kontrol diagnostik.
     adminDiagnostics.hidden = data.isAdmin !== true;
   
     if (data.status === 'success') {
@@ -533,6 +532,7 @@
         'CHECK-IN BERHASIL\n' +
         data.participantName + '\n' +
         data.registrationNo + '\n' +
+        data.participantId + '\n' +
         data.checkinAt,
         'success'
       );
@@ -542,6 +542,7 @@
         'SUDAH CHECK-IN\n' +
         data.participantName + '\n' +
         data.registrationNo + '\n' +
+        data.participantId + '\n' +
         data.checkinAt + '\n' +
         'Panitia: ' + (data.checkedInBy || 'Tidak diketahui'),
         'warning'
