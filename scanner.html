@@ -148,6 +148,18 @@
   </p>
 </main>
 
+
+<div id="adminDiagnostics" hidden>
+  <label class="diagnostic-toggle">
+    <input type="checkbox" id="showDiagnostics">
+    Tampilkan iframe diagnostik
+  </label>
+  <p class="small">
+    Khusus Administrator. Nonaktifkan kembali setelah selesai.
+  </p>
+</div>
+
+
 <iframe
   id="checkinResponseFrame"
   name="checkinResponseFrame"
@@ -166,6 +178,7 @@
   <input name="requestId">
 </form>
 
+
 <script>
   const scanner = new Html5Qrcode('reader');
 
@@ -173,6 +186,25 @@
   const restartButton = document.getElementById('restartButton');
   const resultBox = document.getElementById('result');
   const form = document.getElementById('checkinForm');
+  
+  const adminDiagnostics = document.getElementById('adminDiagnostics');
+  const showDiagnostics = document.getElementById('showDiagnostics');
+  const responseFrame = document.querySelector(
+    'iframe[name="checkinResponseFrame"]'
+  );
+  
+  // Iframe selalu tersembunyi saat halaman pertama kali dibuka.
+  if (responseFrame) {
+    responseFrame.style.display = 'none';
+  }
+  
+  showDiagnostics.addEventListener('change', function() {
+    if (responseFrame) {
+      responseFrame.style.display =
+        showDiagnostics.checked ? 'block' : 'none';
+    }
+  });
+
 
   let scanning = false;
   let busy = false;
@@ -328,46 +360,19 @@
   }
 
   
-  
   window.addEventListener('message', function(event) {
     const data = event.data;
   
-    // DIAGNOSTIK: catat semua pesan yang diterima halaman utama.
-    console.log('[CHECKIN DEBUG] Pesan diterima:', {
-      origin: event.origin,
-      data: data,
-      activeRequestId: activeRequestId,
-      source: event.source
-    });
+    if (!data || typeof data !== 'object') return;
   
-    if (!data || typeof data !== 'object') {
-      console.warn('[CHECKIN DEBUG] Pesan bukan object.');
-      return;
-    }
-  
-    if (data.requestId !== activeRequestId) {
-      console.warn('[CHECKIN DEBUG] Request ID tidak cocok:', {
-        received: data.requestId,
-        expected: activeRequestId
-      });
-      return;
-    }
-  
-    
     const trustedOrigin =
       event.origin === 'https://script.google.com' ||
       event.origin === 'https://script.googleusercontent.com' ||
       event.origin.endsWith('.script.googleusercontent.com') ||
       event.origin.endsWith('.googleusercontent.com');
-
   
-    if (!trustedOrigin) {
-      console.warn(
-        '[CHECKIN DEBUG] Origin tidak dipercaya:',
-        event.origin
-      );
-      return;
-    }
+    if (!trustedOrigin) return;
+    if (data.requestId !== activeRequestId) return;
   
     if (responseTimeout) {
       clearTimeout(responseTimeout);
@@ -376,6 +381,17 @@
   
     busy = false;
     activeRequestId = '';
+  
+    // Iframe disembunyikan kembali setiap kali respons diterima.
+    showDiagnostics.checked = false;
+  
+    if (responseFrame) {
+      responseFrame.style.display = 'none';
+    }
+  
+    // Hanya respons server dengan hak Administrator
+    // yang boleh membuka kontrol diagnostik.
+    adminDiagnostics.hidden = data.isAdmin !== true;
   
     if (data.status === 'success') {
       showResult(
@@ -391,10 +407,13 @@
         data.participantName + '\n' +
         data.registrationNo + '\n' +
         data.checkinAt,
-        'error'
+        'warning'
       );
     } else {
-      showResult(data.message || 'Check-in gagal.', 'error');
+      showResult(
+        data.message || 'Check-in gagal.',
+        'error'
+      );
     }
   
     restartButton.hidden = false;
