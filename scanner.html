@@ -246,6 +246,7 @@
   let busy = false;
   let activeRequestId = '';
   let responseTimeout = null;
+  let activeRequestMode = '';
 
   function showResult(message, type) {
     resultBox.textContent = message;
@@ -325,6 +326,7 @@
       restartButton.hidden = false;
     }, 20000);
 
+    activeRequestMode = 'QR';
     
     // Form POST menghindari kebutuhan membaca respons dengan fetch/CORS.
     // Respons server dikirim kembali melalui postMessage.
@@ -463,6 +465,8 @@
     form.elements.pin.value = pin;
     form.elements.staffName.value = staffName;
     form.elements.requestId.value = activeRequestId;
+    
+    activeRequestMode = 'MANUAL';
   
     showResult('Memvalidasi Participant ID...', 'warning');
   
@@ -556,13 +560,20 @@
       );
     }
   
-    restartButton.hidden = false;
+//  restartButton.hidden = false;
+    restartButton.hidden = activeRequestMode !== 'QR';
+    activeRequestMode = '';
   });
 
 
   startButton.addEventListener('click', startScanner);
 
   restartButton.addEventListener('click', function() {
+    if (getSelectedCheckinMode() !== 'QR') {
+      restartButton.hidden = true;
+      return;
+    }
+  
     restartButton.hidden = true;
     showResult('Siap untuk peserta berikutnya.', '');
     startScanner();
