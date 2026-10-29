@@ -128,6 +128,37 @@
   <input id="pin" type="password"
          inputmode="numeric" autocomplete="off" required>
 
+  <div class="mode-selector">
+    <p><strong>Metode Check-in</strong></p>
+  
+    <label>
+      <input type="radio" name="checkinMode"
+        value="QR" checked>
+      Scan QR dengan kamera
+    </label>
+  
+    <label>
+      <input type="radio" name="checkinMode"
+        value="MANUAL">
+      Input Participant ID manual
+    </label>
+  </div>
+  
+  <div id="manualCheckinPanel" hidden>
+    <label for="manualParticipantId">Participant ID</label>
+    <input
+      id="manualParticipantId"
+      type="text"
+      placeholder="Contoh: P000013"
+      maxlength="7"
+      autocomplete="off"
+    >
+    <button type="button" id="manualCheckinButton">
+      Proses Check-in Manual
+    </button>
+  </div>
+
+  
   <button id="startButton" type="button">
     Aktifkan Kamera
   </button>
@@ -176,6 +207,8 @@
   <input name="pin">
   <input name="staffName">
   <input name="requestId">
+  <input type="hidden" name="mode" value="QR">
+  <input type="hidden" name="participantId" value="">
 </form>
 
 
@@ -261,6 +294,9 @@
     form.elements.pin.value = pin;
     form.elements.staffName.value = staffName;
     form.elements.requestId.value = activeRequestId;
+    
+    form.elements.mode.value = 'QR';
+    form.elements.participantId.value = '';
 
     restartButton.hidden = true;
 
@@ -285,8 +321,8 @@
     
       restartButton.hidden = false;
     }, 20000);
-      
 
+    
     // Form POST menghindari kebutuhan membaca respons dengan fetch/CORS.
     // Respons server dikirim kembali melalui postMessage.
     form.requestSubmit
@@ -360,6 +396,99 @@
   }
 
   
+  const manualPanel = document.getElementById('manualCheckinPanel');
+  const manualIdInput = document.getElementById('manualParticipantId');
+  const manualButton = document.getElementById('manualCheckinButton');
+  
+  function getSelectedCheckinMode() {
+    const selected = document.querySelector(
+      'input[name="checkinMode"]:checked'
+    );
+  
+    return selected ? selected.value : 'QR';
+  }
+  
+  document.querySelectorAll('input[name="checkinMode"]').forEach(
+    function(radio) {
+      radio.addEventListener('change', async function() {
+        await stopScanner();
+  
+        const manualMode = getSelectedCheckinMode() === 'MANUAL';
+  
+        manualPanel.hidden = !manualMode;
+        startButton.hidden = manualMode;
+        restartButton.hidden = true;
+  
+        showResult(
+          manualMode
+            ? 'Masukkan Participant ID yang tertera pada tiket.'
+            : 'Mode kamera aktif. Tekan tombol untuk mulai scan QR.',
+          ''
+        );
+      });
+    }
+  );
+  
+  async function submitManualCheckin() {
+    if (busy) return;
+  
+    const participantId = manualIdInput.value.trim().toUpperCase();
+    const staffName = document.getElementById('staffName').value.trim();
+    const pin = document.getElementById('pin').value;
+  
+    if (!staffName || !pin) {
+      showResult('Isi nama panitia dan PIN terlebih dahulu.', 'error');
+      return;
+    }
+  
+    if (!/^P\d{6}$/.test(participantId)) {
+      showResult(
+        'Participant ID tidak valid. Contoh: P000013.',
+        'error'
+      );
+      return;
+    }
+  
+    busy = true;
+    manualButton.disabled = true;
+    restartButton.hidden = true;
+    activeRequestId = makeRequestId();
+  
+    form.elements.mode.value = 'MANUAL';
+    form.elements.participantId.value = participantId;
+    form.elements.qrToken.value = '';
+    form.elements.pin.value = pin;
+    form.elements.staffName.value = staffName;
+    form.elements.requestId.value = activeRequestId;
+  
+    showResult('Memvalidasi Participant ID...', 'warning');
+  
+    if (responseTimeout) {
+      clearTimeout(responseTimeout);
+    }
+  
+    responseTimeout = setTimeout(function() {
+      if (!busy) return;
+  
+      busy = false;
+      activeRequestId = '';
+      manualButton.disabled = false;
+  
+      showResult(
+        'Belum menerima respons dari server. ' +
+        'Periksa koneksi sebelum mencoba kembali.',
+        'error'
+      );
+  
+      restartButton.hidden = false;
+    }, 20000);
+  
+    form.requestSubmit ? form.requestSubmit() : form.submit();
+  }
+  
+  manualButton.addEventListener('click', submitManualCheckin);
+
+  
   window.addEventListener('message', function(event) {
     const data = event.data;
   
@@ -384,6 +513,9 @@
   
     // Iframe disembunyikan kembali setiap kali respons diterima.
     showDiagnostics.checked = false;
+
+    // Ini memastikan tombol "MANUAL" aktif kembali setelah respons diterima.
+    if (manualButton) manualButton.disabled = false;
   
     if (responseFrame) {
       responseFrame.style.display = 'none';
@@ -401,14 +533,17 @@
         data.checkinAt,
         'success'
       );
+        
     } else if (data.status === 'already_checked_in') {
       showResult(
         'SUDAH CHECK-IN\n' +
         data.participantName + '\n' +
         data.registrationNo + '\n' +
-        data.checkinAt,
+        data.checkinAt + '\n' +
+        'Panitia: ' + (data.checkedInBy || 'Tidak diketahui'),
         'warning'
       );
+      
     } else {
       showResult(
         data.message || 'Check-in gagal.',
